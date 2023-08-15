@@ -1,16 +1,13 @@
 import logging
+import re
 import time
 import numpy as np
 import pyautogui
-import winsound
 from PIL import ImageGrab
-from PIL import Image
 from matplotlib import pyplot as plt
 from paddleocr import PaddleOCR
-import keyboard
 import win32con
 import win32gui as w32
-import pydirectinput as pdi
 
 
 def crop_diagonal_rectangle(image_array, top_left, bottom_right):
@@ -32,7 +29,7 @@ def image_processor(image):
             # 判断是否接近目标颜色
             close_to_target = all(abs(pixel_color[i] - target_color[i]) <= 40 for i in range(3))
 
-            if close_to_target or np.all(pixel_color >= threshold):
+            if (close_to_target and y < processed_img.shape[0] // 2) or np.all(pixel_color >= threshold):
                 processed_img[y, x] = white_color
             else:
                 processed_img[y, x] = black_color
@@ -40,12 +37,12 @@ def image_processor(image):
     return processed_img
 
 
-def recognize_text(image):
+def recognize_entry(image):
     # 创建PaddleOCR实例
     ocr_instance = PaddleOCR(use_angle_cls=True, lang="ch")
 
     # 从原始图像中提取感兴趣区域的部分
-    roi = crop_diagonal_rectangle(image, (1530, 275), (1890, 470))
+    roi = crop_diagonal_rectangle(image, (1442, 400), (1842, 587))
 
     # 使用图片处理器处理传入的图像
     roi_processor = image_processor(roi)
@@ -59,6 +56,24 @@ def recognize_text(image):
         text_list.append(res[1][0])
 
     return text_list, roi_processor
+
+
+def recognize_name(image):
+    # 创建PaddleOCR实例
+    ocr_instance = PaddleOCR(use_angle_cls=True, lang="ch")
+
+    # 从原始图像中提取感兴趣区域的部分
+    roi = crop_diagonal_rectangle(image, (1400, 130), (1842, 160))
+
+    # 调用PaddleOCR的识别方法并获取结果列表
+    result_list = ocr_instance.ocr(roi)[0]
+
+    # 从识别结果中提取文本并存储在文本列表中
+    text_list = []
+    for res in result_list:
+        text_list.append(res[1][0])
+
+    return text_list, roi
 
 
 def levenshtein_distance(s1, s2):
@@ -116,7 +131,40 @@ def compare_to_existing_strings(input_string):
     return best_match
 
 
+def recognize():
+    screen_image = np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080)))
+
+    # 调用文本识别函数，获取识别结果和感兴趣区域
+    recognition_entry_result, processed_entry_image = recognize_entry(screen_image)
+
+    # 处理识别结果中的每个元组的第一个字符串，并重新组合元组
+    processed_result = []
+
+    for i in range(0, len(recognition_entry_result), 2):
+        if i + 1 < len(recognition_entry_result):
+            processed_result.append(
+                (compare_to_existing_strings(recognition_entry_result[i]), recognition_entry_result[i + 1]))
+        else:
+            processed_result.append((compare_to_existing_strings(recognition_entry_result[i]), None))
+
+    recognition_name_result, processed_name_image = recognize_name(screen_image)
+
+    # 使用matplotlib展示处理后的图片
+    plt.figure(figsize=(5, 10))
+    plt.subplot(2, 1, 1)
+    plt.imshow(processed_entry_image)
+    plt.axis('off')  # 取消坐标轴
+    plt.subplot(2, 1, 2)
+    plt.imshow(processed_name_image)
+    plt.axis('off')  # 取消坐标轴
+    plt.tight_layout()
+    plt.show()
+
+    return [recognition_name_result, processed_result]
+
+
 if __name__ == '__main__':
+    logging.disable(logging.DEBUG)
 
     startTrain = w32.FindWindow('UnityWndClass', u'崩坏：星穹铁道')
     if startTrain != 0:
@@ -127,53 +175,62 @@ if __name__ == '__main__':
         print("Window not found.")
         exit(0)
 
-    pyautogui.click(1353, 210)
-    time.sleep(0.5)
+    center_points = [
+        [(57.5, 67.5), (182.5, 67.5), (307.5, 67.5), (432.5, 67.5), (557.5, 67.5), (682.5, 67.5), (807.5, 67.5),
+         (932.5, 67.5), (1057.5, 67.5)],
+        [(57.5, 218.5), (182.5, 218.5), (307.5, 218.5), (432.5, 218.5), (557.5, 218.5), (682.5, 218.5),
+         (807.5, 218.5), (932.5, 218.5), (1057.5, 218.5)],
+        [(57.5, 369.5), (182.5, 369.5), (307.5, 369.5), (432.5, 369.5), (557.5, 369.5), (682.5, 369.5),
+         (807.5, 369.5), (932.5, 369.5), (1057.5, 369.5)],
+        [(57.5, 520.5), (182.5, 520.5), (307.5, 520.5), (432.5, 520.5), (557.5, 520.5), (682.5, 520.5),
+         (807.5, 520.5), (932.5, 520.5), (1057.5, 520.5)],
+        [(57.5, 671.5), (182.5, 671.5), (307.5, 671.5), (432.5, 671.5), (557.5, 671.5), (682.5, 671.5),
+         (807.5, 671.5), (932.5, 671.5), (1057.5, 671.5)]]
 
-    for _ in range(3):
-        roi = crop_diagonal_rectangle(np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080))), (124, 193), (1243, 928))
+    offset_val = (124, 193)
 
-        for _ in range(5):
-            pyautogui.moveTo(1290, 550)
-            pyautogui.scroll(-1)
+    click_count = 0
 
-        num_rows = roi.shape[0] // 135
-        num_cols = roi.shape[1] // 115
+    roi_num = crop_diagonal_rectangle(np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080))), (900, 970), (1050, 1010))
+    click_num = int(re.findall(r'\d+', PaddleOCR(use_angle_cls=True, lang="ch").ocr(roi_num)[0][0][1][0])[0])
 
-        center_points = []
+    for _ in range(5):
+        pyautogui.click(1353, 210)
+        time.sleep(0.1)
+    recognize_list = []
+    for row in center_points:
+        for point in row:
+            x, y = point
+            pyautogui.click(x + offset_val[0], y + offset_val[1])
 
-        for row in range(num_rows):
-            for col in range(num_cols):
-                x = col * (117 + 8)
-                y = row * (135 + 16)
-                plt.plot([x, x + 115, x + 115, x, x], [y, y, y + 135, y + 135, y], color='red')
+            recognize_res = recognize()
+            recognize_list.append(recognize_res)
+            print(recognize_res)
 
-                center_x = x + 115 / 2
-                center_y = y + 135 / 2
-                center_points.append((center_x, center_y))
-                plt.scatter(center_x, center_y, color='lime', s=10)
+            click_count += 1
+            time.sleep(0.1)
+            if click_count >= click_num:
+                break
 
-        plt.imshow(roi)
-        plt.axis('off')  # 关闭坐标轴
-        plt.show()
-        print(center_points)
+    if click_num > 45:
+        while True:
+            # 向下滚动一行
+            for _ in range(5):
+                pyautogui.moveTo(1290, 550)
+                pyautogui.scroll(-1)
 
-    # logging.disable(logging.DEBUG)
-    #
-    # while True:
-    #     # 捕获屏幕图像
-    #     screen_image = np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080)))
-    #
-    #     # 调用文本识别函数，获取识别结果和感兴趣区域
-    #     recognition_result, processed_image = recognize_text(screen_image)
-    #
-    #     # 处理识别结果中的每个元组的第一个字符串，并重新组合元组
-    #     processed_result = [(compare_to_existing_strings(recognition_result[i]), recognition_result[i + 1]) for i in
-    #                         range(0, len(recognition_result), 2)]
-    #
-    #     print(processed_result)
-    #
-    #     plt.imshow(processed_image)
-    #     plt.axis('off')  # 关闭坐标轴
-    #     plt.show()
+            for point in center_points[-1]:
+                x, y = point
+                pyautogui.click(x + offset_val[0], y + offset_val[1])
 
+                recognize_res = recognize()
+                recognize_list.append(recognize_res)
+                print(recognize_res)
+
+                click_count += 1
+                time.sleep(0.1)  # 可以根据实际情况调整点击之间的时间间隔
+                if click_count >= click_num:
+                    break
+
+            if click_count >= click_num:
+                break
