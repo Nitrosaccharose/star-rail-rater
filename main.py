@@ -1,11 +1,12 @@
 import logging
 import re
 import time
+
 import numpy as np
-import pyautogui
-from PIL import ImageGrab
+from PIL import ImageGrab, Image
 from matplotlib import pyplot as plt
 from paddleocr import PaddleOCR
+import pyautogui
 import win32con
 import win32gui as w32
 
@@ -35,19 +36,21 @@ def image_entry_processor(image):
                 processed_img[y, x] = black_color
 
     # 添加上下左右填充
-    padding_top = 10
-    padding_bottom = 10
-    padding_left = 40
-    padding_right = 40
+    padding_top = 0
+    padding_bottom = 0
+    padding_left = 20
+    padding_right = 20
 
     # 创建一个新的图片，尺寸加上填充值
     new_height = processed_img.shape[0] + padding_top + padding_bottom
     new_width = processed_img.shape[1] + padding_left + padding_right
     new_img = np.zeros((new_height, new_width, 3), dtype=np.uint8)
 
-    # 将处理后的图片数据放置在新图片的中间
-    new_img[padding_top:padding_top + processed_img.shape[0],
-    padding_left:padding_left + processed_img.shape[1]] = processed_img
+    target_height = padding_top + processed_img.shape[0]
+    target_width = padding_left + processed_img.shape[1]
+    new_img[padding_top:target_height, padding_left:target_width] = processed_img
+
+    new_img = 255 - new_img
 
     return new_img
 
@@ -75,8 +78,8 @@ def image_name_processor(image):
                 processed_img[y, x] = black_color
 
     # 添加上下左右填充
-    padding_top = 80
-    padding_bottom = 80
+    padding_top = 30
+    padding_bottom = 30
     padding_left = 20
     padding_right = 0
 
@@ -85,15 +88,17 @@ def image_name_processor(image):
     new_width = processed_img.shape[1] + padding_left + padding_right
     new_img = np.zeros((new_height, new_width, 3), dtype=np.uint8)
 
-    # 将处理后的图片数据放置在新图片的中间
-    new_img[padding_top:padding_top + processed_img.shape[0],
-    padding_left:padding_left + processed_img.shape[1]] = processed_img
+    target_height = padding_top + processed_img.shape[0]
+    target_width = padding_left + processed_img.shape[1]
+    new_img[padding_top:target_height, padding_left:target_width] = processed_img
+
+    new_img = 255 - new_img
 
     return new_img
 
 
 def image_level_processor(image):
-    threshold = 210  # 阈值，大于等于该值的色块将变成白色，否则变成黑色
+    threshold = 230
     white_color = (255, 255, 255)
     black_color = (0, 0, 0)
     processed_img = np.copy(image)
@@ -108,84 +113,70 @@ def image_level_processor(image):
                 processed_img[y, x] = black_color
 
     # 添加上下左右填充
-    padding_top = 50
-    padding_bottom = 50
-    padding_left = 80
-    padding_right = 80
+    padding_top = 20
+    padding_bottom = 20
+    padding_left = 20
+    padding_right = 10
 
     # 创建一个新的图片，尺寸加上填充值
     new_height = processed_img.shape[0] + padding_top + padding_bottom
     new_width = processed_img.shape[1] + padding_left + padding_right
     new_img = np.zeros((new_height, new_width, 3), dtype=np.uint8)
 
-    # 将处理后的图片数据放置在新图片的中间
-    new_img[padding_top:padding_top + processed_img.shape[0],
-    padding_left:padding_left + processed_img.shape[1]] = processed_img
+    target_height = padding_top + processed_img.shape[0]
+    target_width = padding_left + processed_img.shape[1]
+    new_img[padding_top:target_height, padding_left:target_width] = processed_img
+
+    new_img = 255 - new_img
 
     return new_img
 
 
-def recognize_entry(image):
-    # 创建PaddleOCR实例
-    ocr_instance = PaddleOCR(use_angle_cls=True, lang="ch")
-
-    # 从原始图像中提取感兴趣区域的部分
-    roi = crop_diagonal_rectangle(image, (1442, 400), (1842, 587))
-
-    # 使用图片处理器处理传入的图像
-    roi_processor = image_entry_processor(roi)
-
-    # 调用PaddleOCR的识别方法并获取结果列表
-    result_list = ocr_instance.ocr(roi_processor)[0]
-
-    # 从识别结果中提取文本并存储在文本列表中
-    text_list = []
+def perform_ocr(image, lang):
+    ocr_instance = PaddleOCR(use_angle_cls=True, lang=lang)
+    result_list = ocr_instance.ocr(image)[0]
+    recognized_texts = []
     for res in result_list:
-        text_list.append(res[1][0])
+        recognized_texts.append(res[1][0])
+    return recognized_texts
 
-    return text_list, roi_processor
+
+def recognize_entry(image):
+    roi = crop_diagonal_rectangle(image, (1442, 400), (1842, 587))
+    processed_image = image_entry_processor(roi)
+    text_list = perform_ocr(processed_image, "ch")
+    return text_list, processed_image
 
 
 def recognize_name(image):
-    # 创建PaddleOCR实例
-    ocr_instance = PaddleOCR(use_angle_cls=True, lang="ch")
-
-    # 从原始图像中提取感兴趣区域的部分
     roi = crop_diagonal_rectangle(image, (1400, 130), (1842, 160))
-
-    # 使用图片处理器处理传入的图像
-    roi_processor = image_name_processor(roi)
-
-    # 调用PaddleOCR的识别方法并获取结果列表
-    result_list = ocr_instance.ocr(roi_processor)[0]
-
-    # 从识别结果中提取文本并存储在文本列表中
-    text_list = []
-    for res in result_list:
-        text_list.append(res[1][0])
-
-    return text_list, roi_processor
+    processed_image = image_name_processor(roi)
+    text_list = perform_ocr(processed_image, "ch")
+    return text_list, processed_image
 
 
 def recognize_level(image):
-    # 创建PaddleOCR实例
-    ocr_instance = PaddleOCR(use_angle_cls=True, lang="ch")
-
-    # 从原始图像中提取感兴趣区域的部分
     roi = crop_diagonal_rectangle(image, (1442, 311), (1485, 345))
+    processed_image = image_level_processor(roi)
+    text_list = perform_ocr(processed_image, "en")
+    return text_list, processed_image
 
-    # 使用图片处理器处理传入的图像
-    roi_processor = image_level_processor(roi)
 
-    # 调用PaddleOCR的识别方法并获取结果列表
-    result_list = ocr_instance.ocr(roi_processor)[0]
+def is_five_star_relic(image):
+    roi = crop_diagonal_rectangle(image, (1400, 130), (1842, 160))
+    target_color1 = (194, 152, 253)  # 紫色
+    target_color2 = (115, 177, 243)  # 蓝色
+    for y in range(roi.shape[0]):
+        for x in range(roi.shape[1]):
+            pixel_color = roi[y, x]
 
-    # 从识别结果中提取文本并存储在文本列表中
-    text_list = []
-    for res in result_list:
-        text_list.append(res[1][0])
+            # 判断是否接近目标颜色
+            close_to_target1 = all(abs(pixel_color[i] - target_color1[i]) <= 30 for i in range(3))
+            close_to_target2 = all(abs(pixel_color[i] - target_color2[i]) <= 30 for i in range(3))
 
-    return text_list, roi_processor
+            if close_to_target1 or close_to_target2:
+                return False
+    return True
 
 
 def levenshtein_distance(s1, s2):
@@ -223,9 +214,7 @@ def compare_to_existing_strings(existing_strings, input_string):
     return best_match
 
 
-def recognize():
-    screen_image = np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080)))
-
+def get_recognize_all_result(screen_image):
     # 调用文本识别函数，获取识别结果和感兴趣区域
     recognition_entry_result, processed_entry_image = recognize_entry(screen_image)
 
@@ -288,7 +277,10 @@ def recognize():
 
     recognition_level_result, processed_level_image = recognize_level(screen_image)
 
-    level_result = recognition_level_result[0]
+    if len(recognition_level_result) == 0:
+        level_result = -1
+    else:
+        level_result = recognition_level_result[0]
 
     plt.figure(figsize=(5, 10))
     plt.subplot(3, 1, 1)
@@ -306,18 +298,67 @@ def recognize():
     return [name_result, level_result, processed_result]
 
 
-if __name__ == '__main__':
+def get_fullscreen_capture():
+    return np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080)))
+
+
+def get_relics_num():
+    roi = crop_diagonal_rectangle(get_fullscreen_capture(), (900, 970), (1050, 1010))
+    return int(re.findall(r'\d+', PaddleOCR(use_angle_cls=True, lang="ch").ocr(roi)[0][0][1][0])[0])
+
+
+def init_main_setup():
     logging.disable(logging.DEBUG)
 
+
+def set_game_window_on_top():
     startTrain = w32.FindWindow('UnityWndClass', u'崩坏：星穹铁道')
     if startTrain != 0:
         w32.ShowWindow(startTrain, win32con.SW_NORMAL)
         w32.SetForegroundWindow(startTrain)
         time.sleep(1)
     else:
-        print("Window not found.")
+        print("未找到游戏窗口！")
         exit(0)
 
+
+def set_game_window_not_on_top():
+    game_window_title = u'崩坏：星穹铁道'
+    game_window = w32.FindWindow('UnityWndClass', game_window_title)
+
+    if game_window != 0:
+        w32.SetWindowPos(game_window, win32con.HWND_BOTTOM, 0, 0, 0, 0,
+                         win32con.SWP_NOMOVE | win32con.SWP_NOSIZE)
+        print("游戏窗口已取消置顶。")
+    else:
+        print("未找到游戏窗口！")
+
+
+def scroll_to_next_relic_row():
+    for _ in range(5):
+        pyautogui.moveTo(1290, 550)
+        pyautogui.scroll(-1)
+
+
+def reset_relic_list_to_start():
+    for _ in range(5):
+        pyautogui.click(1353, 210)
+        time.sleep(0.1)
+
+
+def scale_image(image_data, scale_factor):
+    pil_image = Image.fromarray(image_data)
+
+    new_width = int(image_data.shape[1] * scale_factor)
+    new_height = int(image_data.shape[0] * scale_factor)
+
+    resized_image = pil_image.resize((new_width, new_height), Image.ANTIALIAS)
+
+    resized_image_data = np.array(resized_image)
+    return resized_image_data
+
+
+def get_relics_list():
     center_points = [
         [(57.5, 67.5), (182.5, 67.5), (307.5, 67.5), (432.5, 67.5), (557.5, 67.5), (682.5, 67.5), (807.5, 67.5),
          (932.5, 67.5), (1057.5, 67.5)],
@@ -329,52 +370,71 @@ if __name__ == '__main__':
          (807.5, 520.5), (932.5, 520.5), (1057.5, 520.5)],
         [(57.5, 671.5), (182.5, 671.5), (307.5, 671.5), (432.5, 671.5), (557.5, 671.5), (682.5, 671.5),
          (807.5, 671.5), (932.5, 671.5), (1057.5, 671.5)]]
-
     offset_val = (124, 193)
-
     click_count = 0
-
-    roi_num = crop_diagonal_rectangle(np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080))), (900, 970), (1050, 1010))
-    click_num = int(re.findall(r'\d+', PaddleOCR(use_angle_cls=True, lang="ch").ocr(roi_num)[0][0][1][0])[0])
-
-    recognize_list = []
-
-    for _ in range(5):
-        pyautogui.click(1353, 210)
-        time.sleep(0.1)
+    image_data_list = []
+    result_list = []
+    # relics_num = get_relics_num()
+    relics_num = 5
     for row in center_points:
         for point in row:
             x, y = point
             pyautogui.click(x + offset_val[0], y + offset_val[1])
-
-            recognize_res = recognize()
-            recognize_list.append(recognize_res)
-            print(recognize_res)
+            image_data_list.append(get_fullscreen_capture())
 
             click_count += 1
             time.sleep(0.1)
-            if click_count >= click_num:
+            if click_count >= relics_num:
                 break
+        if click_count >= relics_num:
+            break
 
-    if click_num > 45:
+    if relics_num > 45:
         while True:
             # 向下滚动一行
-            for _ in range(5):
-                pyautogui.moveTo(1290, 550)
-                pyautogui.scroll(-1)
-
+            scroll_to_next_relic_row()
             for point in center_points[-1]:
                 x, y = point
                 pyautogui.click(x + offset_val[0], y + offset_val[1])
-
-                recognize_res = recognize()
-                recognize_list.append(recognize_res)
-                print(recognize_res)
+                image_data_list.append(get_fullscreen_capture())
 
                 click_count += 1
-                time.sleep(0.1)  # 可以根据实际情况调整点击之间的时间间隔
-                if click_count >= click_num:
+                time.sleep(0.1)
+                if click_count >= relics_num:
                     break
 
-            if click_count >= click_num:
+            if click_count >= relics_num:
                 break
+
+    set_game_window_not_on_top()
+
+    total_time = 0.0
+
+    for image_data in image_data_list:
+        if is_five_star_relic(image_data):
+            start_time = time.time()
+
+            recognize_res = get_recognize_all_result(image_data)
+
+            end_time = time.time()
+            iteration_time = end_time - start_time
+            total_time += iteration_time
+
+            print(recognize_res)
+            result_list.append(recognize_res)
+
+    average_time = total_time / len(image_data_list)
+
+    print(f"总共用时: {total_time:.4f} 秒")
+    print(f"平均用时: {average_time:.4f} 秒")
+    return result_list
+
+
+if __name__ == '__main__':
+    init_main_setup()
+
+    set_game_window_on_top()
+
+    reset_relic_list_to_start()
+
+    relics_list = get_relics_list()
