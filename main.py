@@ -113,10 +113,10 @@ def image_level_processor(image):
                 processed_img[y, x] = black_color
 
     # 添加上下左右填充
-    padding_top = 20
-    padding_bottom = 20
-    padding_left = 20
-    padding_right = 10
+    padding_top = 80
+    padding_bottom = 80
+    padding_left = 40
+    padding_right = 40
 
     # 创建一个新的图片，尺寸加上填充值
     new_height = processed_img.shape[0] + padding_top + padding_bottom
@@ -302,7 +302,7 @@ def get_fullscreen_capture():
     return np.array(ImageGrab.grab(bbox=(0, 0, 1920, 1080)))
 
 
-def get_relics_num():
+def get_relic_num():
     roi = crop_diagonal_rectangle(get_fullscreen_capture(), (900, 970), (1050, 1010))
     return int(re.findall(r'\d+', PaddleOCR(use_angle_cls=True, lang="ch").ocr(roi)[0][0][1][0])[0])
 
@@ -317,6 +317,7 @@ def set_game_window_on_top():
         w32.ShowWindow(startTrain, win32con.SW_NORMAL)
         w32.SetForegroundWindow(startTrain)
         time.sleep(1)
+        print("游戏窗口已置顶。")
     else:
         print("未找到游戏窗口！")
         exit(0)
@@ -358,7 +359,7 @@ def scale_image(image_data, scale_factor):
     return resized_image_data
 
 
-def get_relics_list():
+def get_relic_list():
     center_points = [
         [(57.5, 67.5), (182.5, 67.5), (307.5, 67.5), (432.5, 67.5), (557.5, 67.5), (682.5, 67.5), (807.5, 67.5),
          (932.5, 67.5), (1057.5, 67.5)],
@@ -374,8 +375,7 @@ def get_relics_list():
     click_count = 0
     image_data_list = []
     result_list = []
-    # relics_num = get_relics_num()
-    relics_num = 5
+    relics_num = get_relic_num()
     for row in center_points:
         for point in row:
             x, y = point
@@ -409,7 +409,7 @@ def get_relics_list():
     set_game_window_not_on_top()
 
     total_time = 0.0
-
+    print("[")
     for image_data in image_data_list:
         if is_five_star_relic(image_data):
             start_time = time.time()
@@ -420,14 +420,88 @@ def get_relics_list():
             iteration_time = end_time - start_time
             total_time += iteration_time
 
-            print(recognize_res)
-            result_list.append(recognize_res)
+            print(recognize_res, end=",\n")
 
+            result_list.append(recognize_res)
+    print("]")
     average_time = total_time / len(image_data_list)
 
     print(f"总共用时: {total_time:.4f} 秒")
     print(f"平均用时: {average_time:.4f} 秒")
     return result_list
+
+
+def validate_relic(data_relic):
+    valid_names = ['过客的冥途游履', '过客的残绣风衣', '过客的游龙臂鞲', '过客的逢春木簪', '快枪手的猎风披肩',
+                   '快枪手的粗革手套', '快枪手的野穗毡帽', '快枪手的铆钉马靴', '圣骑的宽恕盔面', '圣骑的沉默誓环',
+                   '圣骑的秩序铁靴', '圣骑的肃穆胸甲', '雪猎的荒神兜帽', '雪猎的巨蜥手套', '雪猎的冰龙披风',
+                   '雪猎的鹿皮软靴', '拳王的冠军护头', '拳王的弧步战靴', '拳王的贴身护胸', '拳王的重炮拳套',
+                   '铁卫的旧制军服', '铁卫的银鳞手甲', '铁卫的铸铁面盔', '铁卫的白银护胫', '火匠的黑曜目镜',
+                   '火匠的御火戒指', '火匠的阻燃围裙', '火匠的合金义肢', '天才的元域深潜', '天才的引力漫步',
+                   '天才的超距遥感', '天才的频变捕手', '乐队的偏光墨镜', '乐队的巡演手绳', '乐队的钉刺皮衣',
+                   '乐队的铆钉短靴', '翔鹰的长喙头盔', '翔鹰的鹰击指环', '翔鹰的翼装束带', '翔鹰的绒羽绑带',
+                   '怪盗的千人假面', '怪盗的流星快靴', '怪盗的纤钢爪钩', '怪盗的绘纹手套', '莳者的复明义眼',
+                   '莳者的机巧木手', '莳者的承露羽衣', '莳者的天人丝履', '信使的全息目镜', '信使的密信挎包',
+                   '信使的百变义手', '信使的酷跑板鞋', '黑塔的空间站点', '黑塔的漫历轨迹', '罗浮仙舟的天外楼船',
+                   '罗浮仙舟的建木枝蔓', '公司的巨构总部', '公司的贸易航道', '贝洛伯格的存护堡垒',
+                   '贝洛伯格的铁卫防线', '螺丝星的机械烈阳', '螺丝星的环星孔带', '萨尔索图的移动城市',
+                   '萨尔索图的晨昏界线', '塔利亚的钉壳小镇', '塔利亚的裸皮电线', '翁瓦克的诞生之岛',
+                   '翁瓦克的环岛海岸', '泰科铵的镭射球场', '泰科铵的弧光赛道', '伊须磨洲的残船鲸落',
+                   '伊须磨洲的坼裂缆索']
+    msg_str = ""
+    # Check the name (0号元素)
+    if data_relic[0] not in valid_names:
+        msg_str += "名字不合法"
+
+    # Check the 1号元素是否为纯数字并且取值范围在0~15
+    if not re.match(r'^\d+$', data_relic[1]) or int(data_relic[1]) < 0 or int(data_relic[1]) > 15:
+        msg_str += "等级不是纯数字或不在范围内"
+
+    # Check the 2号元素中的每个元组
+    for item in data_relic[2]:
+        if len(item) != 2:
+            msg_str += "元组长度不等于2"
+
+        valid_attributes = [
+            "生命值",
+            "防御力",
+            "攻击力",
+            "暴击率",
+            "暴击伤害",
+            "效果命中",
+            "效果抵抗",
+            "击破特攻",
+            "速度",
+            "量子属性伤害提高",
+            "虚数属性伤害提高",
+            "火属性伤害提高",
+            "冰属性伤害提高",
+            "风属性伤害提高",
+            "雷属性伤害提高",
+            "物理属性伤害提高",
+            "物理属性伤害提高",
+            "能量恢复效率",
+            "治疗量加成"
+        ]
+        if item[0] not in valid_attributes:
+            msg_str += f"属性{item[0]}不合法"
+
+        if not re.match(r'^\d+$', item[1]) and not re.match(r'^\d+(\.\d+)?%$', item[1]):
+            msg_str += f"属性{item[0]}的值不合法"
+        if msg_str == "":
+            return msg_str, True
+        return msg_str, False
+
+
+def validate_relic_list(data_list):
+    all_valid = True
+    for data in data_list:
+        error_str, is_valid = validate_relic(data)
+        if not is_valid:
+            all_valid = False
+            print(data, error_str)
+    if all_valid:
+        print("全部合法")
 
 
 if __name__ == '__main__':
@@ -437,4 +511,6 @@ if __name__ == '__main__':
 
     reset_relic_list_to_start()
 
-    relics_list = get_relics_list()
+    relics_list = get_relic_list()
+
+    validate_relic_list(relics_list)
